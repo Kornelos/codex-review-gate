@@ -1,0 +1,13 @@
+{
+  "name": "codex-review-gate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Require a clean Codex review stamp on the current pull request commit.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test template/.github/scripts/codex-review-gate.test.mjs test/distribution.test.mjs",
+    "check": "node scripts/check-distribution.mjs"
+  }
+}
