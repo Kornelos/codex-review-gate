@@ -1,0 +1,20 @@
+name: Codex review event
+
+on:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+# Review events can run a workflow from the PR revision. This bridge has no
+# credentials, checkout, artifacts, or PR-controlled commands. Its completion
+# wakes the default-branch publisher, which reads current GitHub API state.
+permissions: {}
+
+jobs:
+  notify:
+    name: Notify trusted review gate
+    if: github.event.review.user.id == 199175422
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Signal review activity
+        run: echo 'Review activity will be reconciled by the trusted gate.'

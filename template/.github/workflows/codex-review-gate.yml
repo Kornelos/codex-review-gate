@@ -1,0 +1,71 @@
+name: Codex review gate
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, edited]
+  issue_comment:
+    types: [created, edited, deleted]
+  workflow_run:
+    workflows: ['Codex review event']
+    types: [completed]
+  # GitHub Actions has no reaction event. Reconcile thumbs-up-only reviews,
+  # and missed events without keeping a runner waiting.
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: 'PR number to check first (all open PRs are reconciled)'
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  issues: read
+  pull-requests: read
+  statuses: read
+
+# Serialize writers across event types; every run reconciles all current PRs
+# because GitHub can replace an older pending run with a newer queued event.
+concurrency:
+  group: codex-review-gate
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    name: Evaluate Codex review stamp
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.pull_request && github.event.comment.user.id == 199175422)
+    runs-on: ubuntu-latest
+    # Pre-create this environment with a selected-branch policy allowing only
+    # main (no tags/PR refs). Keep the App key here, never in repository secrets.
+    environment: codex-review-gate
+    timeout-minutes: 10
+    steps:
+      # This privileged workflow must only execute trusted default-branch code.
+      # Never check out the PR head or interpolate PR/comment text into a shell.
+      - name: Checkout trusted gate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: .github
+
+      - name: Create the dedicated gate App token
+        id: gate-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.CODEX_REVIEW_GATE_CLIENT_ID }}
+          private-key: ${{ secrets.CODEX_REVIEW_GATE_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-statuses: write
+
+      - name: Publish the Codex Review status on current PR commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GATE_STATUS_TOKEN: ${{ steps.gate-token.outputs.token }}
+          GATE_PUBLISHER_LOGIN: ${{ steps.gate-token.outputs.app-slug }}[bot]
+          PR_NUMBER: ${{ inputs.pull_request }}
+        run: node .github/scripts/codex-review-gate.mjs
